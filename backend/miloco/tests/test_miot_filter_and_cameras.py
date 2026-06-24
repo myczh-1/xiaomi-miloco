@@ -288,7 +288,7 @@ async def test_list_cameras_with_state_flags():
     assert by_did["c1"]["is_online"] is True
     assert by_did["c1"]["connected"] is False
     assert by_did["c2"]["in_use"] is True
-    assert by_did["c2"]["is_online"] is False  # lan_online=False
+    assert by_did["c2"]["is_online"] is True  # 只看云端 online，lan_online 不影响
     assert by_did["c2"]["connected"] is True
 
 

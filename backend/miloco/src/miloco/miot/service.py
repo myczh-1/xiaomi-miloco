@@ -944,9 +944,9 @@ class MiotService:
         cameras = {did: info for did, info in cameras.items() if did in devices}
         out: list[dict] = []
         for did, info in cameras.items():
-            online = bool(getattr(info, "online", False)) and bool(
-                getattr(info, "lan_online", False)
-            )
+            # 只看云端 online：lan_online 依赖 UDP 广播发现（端口 54321），
+            # VPN / 跨子网场景下广播到不了摄像头，但 PPCS 云中继仍可连通。
+            online = bool(getattr(info, "online", False))
             out.append(
                 {
                     "did": did,
@@ -978,15 +978,13 @@ class MiotService:
             )
 
         if enable_dids:
-            # 离线设备禁止「开启」投喂:它被感知接入层 online_only 过滤、永远连不上,
+            # 离线设备禁止「开启」投喂:云端离线的摄像头连不上(拔电/断网),
             # 开了也不出画面、徒占上限名额。只拦「开启」——已启用的设备掉线后仍保留
             # inUse=true(允许态不被强制改),且可正常被「关闭」(disable 不走这条校验)。
-            # 在线口径 = online && lan_online,与 list_cameras_with_state 的 is_online 一致。
+            # 只看云端 online，与 list_cameras_with_state 同口径。
             def _online(did: str) -> bool:
                 info = cameras[did]
-                return bool(getattr(info, "online", False)) and bool(
-                    getattr(info, "lan_online", False)
-                )
+                return bool(getattr(info, "online", False))
 
             offline_enable = [d for d in enable_dids if not _online(d)]
             if offline_enable:

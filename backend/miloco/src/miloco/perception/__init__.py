@@ -8,6 +8,7 @@ from miloco.database.perception_repo import PerceptionLogRepo
 from miloco.perception.client import PerceptionEngineProxy
 from miloco.perception.collect.camera_adapter import CameraDeviceAdapter
 from miloco.perception.collect.collector import MultimodalCollector
+from miloco.perception.collect.rtsp_adapter import RtspDeviceAdapter
 from miloco.perception.processor import PipelineProcessor
 
 
@@ -26,15 +27,17 @@ async def init_perception_module(miot_proxy):
     # 2. 创建窗口就绪事件（回调从流线程触发，需 threadsafe 调度到事件循环）
     loop = asyncio.get_running_loop()
     window_ready_event = asyncio.Event()
-
-    # 3. 初始化相机适配器
+    # 3. 初始化适配器
     camera_adapter = CameraDeviceAdapter(
         miot_proxy,
         on_window_ready=lambda: loop.call_soon_threadsafe(window_ready_event.set),
     )
+    rtsp_adapter = RtspDeviceAdapter(
+        on_window_ready=lambda: loop.call_soon_threadsafe(window_ready_event.set),
+    )
 
     # 4. 初始化多模态收集器
-    multimodal_collector = MultimodalCollector([camera_adapter])
+    multimodal_collector = MultimodalCollector([camera_adapter, rtsp_adapter])
 
     # 5. 初始化管道处理器
     pipeline_processor = PipelineProcessor(

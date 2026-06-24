@@ -152,11 +152,11 @@ class CameraDeviceAdapter(BaseDeviceAdapter):
 
             camera_info = CameraInfo.model_validate(info.model_dump())
 
-            device_online = camera_info.online and camera_info.lan_online
-            # require_lan=False 时只看云端 online：放过 lan_online 陈旧成 false 的
-            # 卡死态相机（云端 online=True，refresh 能救活），但排除云端就离线
-            # （拔电/断网）的相机——给「应连数」判据用，避免离线相机致 refresh 空转。
-            connectable = device_online if require_lan else camera_info.online
+            # 只看云端 online：lan_online 依赖 UDP 广播发现（端口 54321），
+            # VPN / 跨子网场景下广播到不了摄像头，但 PPCS 云中继仍可连通。
+            device_online = camera_info.online
+            # require_lan 参数保留向后兼容，但行为统一为只看云端 online。
+            connectable = device_online
             if online_only and not connectable:
                 continue
 
@@ -361,7 +361,7 @@ class CameraDeviceAdapter(BaseDeviceAdapter):
             device_type="camera",
             room_id=camera.room_name,
             room_name=camera.room_name,
-            online=camera.online and camera.lan_online,
+            online=camera.online,
         )
 
     def _build_device_data(

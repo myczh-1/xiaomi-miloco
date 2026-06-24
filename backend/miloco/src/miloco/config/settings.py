@@ -250,6 +250,18 @@ class PerceptionCollectSettings(BaseModel):
     )
 
 
+class RtspSettings(BaseModel):
+    """RTSP 流接入参数（测试 / 调试用）。"""
+
+    url: str | None = Field(
+        default=None,
+        description="RTSP 流地址，如 rtsp://192.168.x.x:8080/h264_pcm.sdp；为空时禁用 RTSP 适配器",
+    )
+    name: str = Field(
+        default="RTSP Camera",
+        description="RTSP 流在前端显示的名称",
+    )
+
 class PerceptionSettings(BaseModel):
     """感知管线相关配置。"""
 
@@ -285,6 +297,10 @@ class PerceptionSettings(BaseModel):
     collect: PerceptionCollectSettings = Field(
         default_factory=PerceptionCollectSettings,
         description="采集窗口策略",
+    )
+    rtsp: RtspSettings = Field(
+        default_factory=RtspSettings,
+        description="RTSP 流接入参数（测试 / 调试用，为空时禁用）",
     )
     engine: dict[str, Any] = Field(
         default_factory=dict,
