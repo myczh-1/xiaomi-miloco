@@ -221,42 +221,32 @@ class RtspDeviceAdapter(BaseDeviceAdapter):
 
     def _pull_once(self, state: _RtspDeviceState) -> None:
         """Single connection attempt — blocks until stream ends or stop_event."""
-        logger.info("Opening RTSP stream: %s", state.url)
+        logger.info("Opening RTSP/RTMP stream: %s", state.url)
         container = av.open(
             state.url,
             options={
-                "rtsp_transport": "tcp",
                 "stimeout": "5000000",  # 5s connect timeout
                 "max_delay": "500000",
             },
             timeout=10,
         )
         state.connected = True
-        reconnect_delay = 2.0  # reset on success
-        logger.info("RTSP stream connected: %s", state.url)
-
-        video_stream = container.streams.video[0] if container.streams.video else None
-        audio_stream = container.streams.audio[0] if container.streams.audio else None
-
-        if video_stream:
-            video_stream.thread_type = "AUTO"
-        if audio_stream:
-            audio_stream.thread_type = "AUTO"
+        logger.info("Stream connected: %s", state.url)
 
         try:
-            for frame in container.decode(video=0 if video_stream else None,
-                                          audio=0 if audio_stream else None):
+            for packet in container.demux():
                 if state.stop_event.is_set():
                     break
-
-                wall_ms = _monotonic_ms()
-                if state.epoch_delta is None:
-                    state.epoch_delta = _unix_ms() - wall_ms
-
-                if isinstance(frame, av.VideoFrame):
-                    self._handle_video_frame(state, frame, wall_ms)
-                elif isinstance(frame, av.AudioFrame):
-                    self._handle_audio_frame(state, frame, wall_ms)
+                for frame in packet.decode():
+                    if state.stop_event.is_set():
+                        break
+                    wall_ms = _monotonic_ms()
+                    if state.epoch_delta is None:
+                        state.epoch_delta = _unix_ms() - wall_ms
+                    if isinstance(frame, av.VideoFrame):
+                        self._handle_video_frame(state, frame, wall_ms)
+                    elif isinstance(frame, av.AudioFrame):
+                        self._handle_audio_frame(state, frame, wall_ms)
         finally:
             container.close()
             state.connected = False
