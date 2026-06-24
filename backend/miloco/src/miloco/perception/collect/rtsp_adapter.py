@@ -237,6 +237,9 @@ class RtspDeviceAdapter(BaseDeviceAdapter):
             for packet in container.demux():
                 if state.stop_event.is_set():
                     break
+                # Skip data streams (metadata, etc.) — only video/audio have decode()
+                if not isinstance(packet.stream, (av.video.stream.VideoStream, av.audio.stream.AudioStream)):
+                    continue
                 for frame in packet.decode():
                     if state.stop_event.is_set():
                         break
@@ -250,7 +253,6 @@ class RtspDeviceAdapter(BaseDeviceAdapter):
         finally:
             container.close()
             state.connected = False
-
     def _handle_video_frame(
         self, state: _RtspDeviceState, frame: av.VideoFrame, wall_ms: int
     ) -> None:
