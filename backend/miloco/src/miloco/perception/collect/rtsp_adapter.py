@@ -185,9 +185,6 @@ class RtspDeviceAdapter(BaseDeviceAdapter):
                 )
         return result
 
-    async def sync_devices(self, all_devices: dict | None = None) -> None:
-        """No-op — RTSP stream is static, no hot-plug."""
-        pass
 
     async def shutdown(self) -> None:
         for did in list(self._devices):
