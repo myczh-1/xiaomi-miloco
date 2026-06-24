@@ -8,12 +8,17 @@ perception log retrieval, and device listing.
 import logging
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
 from miloco.manager import get_manager
 from miloco.middleware import verify_token
 from miloco.middleware.exceptions import HTTPException
-from miloco.perception.schema import OnDemandPerceptionRequest
+from miloco.perception.schema import (
+    OnDemandPerceptionRequest,
+    PrivacyPreviewStatus,
+    RtspDebugConfig,
+    RtspDebugConfigRequest,
+)
 from miloco.schema.common_schema import NormalResponse
 
 logger = logging.getLogger(__name__)
@@ -116,4 +121,72 @@ async def list_devices():
         data=[asdict(d) for d in devices],
     )
 
+
+@router.get(
+    "/debug/rtsp",
+    summary="Get debug RTSP/RTMP source config and state",
+    dependencies=[Depends(verify_token)],
+)
+async def get_rtsp_debug_config():
+    data = await manager.perception_service.get_rtsp_debug_config()
+    return NormalResponse(
+        code=0,
+        message="ok",
+        data=RtspDebugConfig.model_validate(data),
+    )
+
+
+@router.put(
+    "/debug/rtsp",
+    summary="Update debug RTSP/RTMP source config",
+    dependencies=[Depends(verify_token)],
+)
+async def update_rtsp_debug_config(request: RtspDebugConfigRequest):
+    data = await manager.perception_service.update_rtsp_debug_config(
+        url=request.url,
+        name=request.name,
+    )
+    return NormalResponse(
+        code=0,
+        message="ok",
+        data=RtspDebugConfig.model_validate(data),
+    )
+
+
+@router.get(
+    "/debug/rtsp/frame",
+    summary="Get latest debug RTSP/RTMP preview frame as JPEG",
+    dependencies=[Depends(verify_token)],
+)
+async def get_rtsp_debug_frame():
+    payload = await manager.perception_service.get_rtsp_preview_jpeg()
+    if payload is None:
+        raise HTTPException(message="rtsp preview not available", status_code=404)
+    return Response(content=payload, media_type="image/jpeg")
+
+
+@router.get(
+    "/debug/privacy_preview",
+    summary="Get privacy-plugin preview status",
+    dependencies=[Depends(verify_token)],
+)
+async def get_privacy_preview_status():
+    data = manager.perception_service.get_privacy_preview_status()
+    return NormalResponse(
+        code=0,
+        message="ok",
+        data=PrivacyPreviewStatus.model_validate(data),
+    )
+
+
+@router.get(
+    "/debug/privacy_preview/{variant}",
+    summary="Get latest privacy-plugin preview frame as JPEG",
+    dependencies=[Depends(verify_token)],
+)
+async def get_privacy_preview_image(variant: str):
+    payload = manager.perception_service.get_privacy_preview_image(variant)
+    if payload is None:
+        raise HTTPException(message="privacy preview not available", status_code=404)
+    return Response(content=payload, media_type="image/jpeg")
 

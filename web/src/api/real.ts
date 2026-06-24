@@ -20,6 +20,8 @@ import type {
   HomeStatus,
   PerceptionCamera,
   Person,
+  PrivacyPreviewStatus,
+  RtspDebugConfig,
   Scene,
   ScopeCamera,
   ScopeHome,
@@ -854,6 +856,132 @@ export async function realListCameras(): Promise<PerceptionCamera[]> {
       channel: 0,
       roomName: c.room_name,
     }));
+}
+
+function toCamelRtspDebugConfig(data: {
+  did: string;
+  enabled: boolean;
+  url?: string | null;
+  name: string;
+  connected: boolean;
+  last_error?: string | null;
+  has_preview: boolean;
+  last_frame_wall_ms: number;
+}): RtspDebugConfig {
+  return {
+    did: data.did,
+    enabled: data.enabled,
+    url: data.url ?? null,
+    name: data.name,
+    connected: data.connected,
+    lastError: data.last_error ?? null,
+    hasPreview: data.has_preview,
+    lastFrameWallMs: data.last_frame_wall_ms,
+  };
+}
+
+function toCamelPrivacyPreviewStatus(data: {
+  plugin_installed: boolean;
+  plugin_enabled: boolean;
+  debug_enabled: boolean;
+  patched: boolean;
+  has_preview: boolean;
+  message: string;
+  timestamp_ms: number;
+  frame_count: number;
+  width: number;
+  height: number;
+}): PrivacyPreviewStatus {
+  return {
+    pluginInstalled: data.plugin_installed,
+    pluginEnabled: data.plugin_enabled,
+    debugEnabled: data.debug_enabled,
+    patched: data.patched,
+    hasPreview: data.has_preview,
+    message: data.message,
+    timestampMs: data.timestamp_ms,
+    frameCount: data.frame_count,
+    width: data.width,
+    height: data.height,
+  };
+}
+
+async function fetchAuthedBlob(path: string): Promise<Blob> {
+  const headers = new Headers();
+  const token = resolveToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const resp = await fetch(path, { headers });
+  if (!resp.ok) {
+    let msg = `HTTP ${resp.status}`;
+    try {
+      const body = await resp.json();
+      msg = body.message ?? body.detail ?? msg;
+    } catch {
+      // ignore
+    }
+    throw new Error(msg);
+  }
+  return resp.blob();
+}
+
+export async function realGetRtspDebugConfig(): Promise<RtspDebugConfig> {
+  const r = await apiFetch<Normal<{
+    did: string;
+    enabled: boolean;
+    url?: string | null;
+    name: string;
+    connected: boolean;
+    last_error?: string | null;
+    has_preview: boolean;
+    last_frame_wall_ms: number;
+  }>>("/api/perception/debug/rtsp");
+  return toCamelRtspDebugConfig(r.data);
+}
+
+export async function realUpdateRtspDebugConfig(input: {
+  url?: string | null;
+  name: string;
+}): Promise<RtspDebugConfig> {
+  const r = await apiFetch<Normal<{
+    did: string;
+    enabled: boolean;
+    url?: string | null;
+    name: string;
+    connected: boolean;
+    last_error?: string | null;
+    has_preview: boolean;
+    last_frame_wall_ms: number;
+  }>>("/api/perception/debug/rtsp", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+  return toCamelRtspDebugConfig(r.data);
+}
+
+export async function realGetRtspDebugPreview(): Promise<Blob> {
+  return fetchAuthedBlob("/api/perception/debug/rtsp/frame");
+}
+
+export async function realGetPrivacyPreviewStatus(): Promise<PrivacyPreviewStatus> {
+  const r = await apiFetch<Normal<{
+    plugin_installed: boolean;
+    plugin_enabled: boolean;
+    debug_enabled: boolean;
+    patched: boolean;
+    has_preview: boolean;
+    message: string;
+    timestamp_ms: number;
+    frame_count: number;
+    width: number;
+    height: number;
+  }>>("/api/perception/debug/privacy_preview");
+  return toCamelPrivacyPreviewStatus(r.data);
+}
+
+export async function realGetPrivacyPreviewImage(
+  variant: "original" | "processed",
+): Promise<Blob> {
+  return fetchAuthedBlob(`/api/perception/debug/privacy_preview/${variant}`);
 }
 
 // ── 米家账号绑定 OAuth ────────────────────────────────────

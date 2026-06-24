@@ -9,7 +9,12 @@ from the realtime stream buffers via collector.collect_batch(),
 ensuring a unified data path.
 """
 
+from __future__ import annotations
+
 import logging
+from collections.abc import Mapping
+
+import cv2
 
 from miloco.database.perception_repo import PerceptionLogRepo
 from miloco.middleware.exceptions import BusinessException
@@ -22,6 +27,7 @@ from miloco.perception.schema import (
     PerceptionEngineStatus,
 )
 from miloco.perception.types import PerceptionDevice
+from miloco.utils.agent_config import update_shared_config
 from miloco.utils.time_utils import ms_to_iso_local, now_ms
 
 logger = logging.getLogger(__name__)
@@ -220,3 +226,117 @@ class PerceptionService:
                 )
 
         return devices
+
+    async def get_rtsp_debug_config(self) -> dict[str, object]:
+        adapter = self._collector.get_adapter("rtsp")
+        if adapter is None:
+            return {
+                "did": "rtsp_0",
+                "enabled": False,
+                "url": None,
+                "name": "RTSP Camera",
+                "connected": False,
+                "last_error": "rtsp adapter unavailable",
+                "has_preview": False,
+                "last_frame_wall_ms": 0,
+            }
+        getter = getattr(adapter, "get_debug_status", None)
+        if callable(getter):
+            return getter()
+        return {
+            "did": "rtsp_0",
+            "enabled": False,
+            "url": None,
+            "name": "RTSP Camera",
+            "connected": False,
+            "last_error": "rtsp debug status unavailable",
+            "has_preview": False,
+            "last_frame_wall_ms": 0,
+        }
+
+    async def update_rtsp_debug_config(self, *, url: str | None, name: str) -> dict[str, object]:
+        norm_url = (url or "").strip() or None
+        norm_name = name.strip() or "RTSP Camera"
+        update_shared_config(perception={"rtsp": {"url": norm_url, "name": norm_name}})
+        adapter = self._collector.get_adapter("rtsp")
+        if adapter is not None:
+            await adapter.sync_devices()
+        return await self.get_rtsp_debug_config()
+
+    async def get_rtsp_preview_jpeg(self, did: str = "rtsp_0") -> bytes | None:
+        adapter = self._collector.get_adapter("rtsp")
+        if adapter is None:
+            return None
+        peek = getattr(adapter, "peek_latest_frame", None)
+        if not callable(peek):
+            return None
+        frame = peek(did)
+        if frame is None:
+            return None
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if not ok:
+            return None
+        return buf.tobytes()
+
+    def get_privacy_preview_status(self) -> dict[str, object]:
+        status: dict[str, object] = {
+            "plugin_installed": False,
+            "plugin_enabled": False,
+            "debug_enabled": False,
+            "patched": False,
+            "has_preview": False,
+            "message": "",
+            "timestamp_ms": 0,
+            "frame_count": 0,
+            "width": 0,
+            "height": 0,
+        }
+        try:
+            from miloco_privacy_plugin.config import load_config
+
+            cfg = load_config()
+            status["plugin_installed"] = True
+            status["plugin_enabled"] = bool(cfg.enabled)
+            status["debug_enabled"] = bool(cfg.debug)
+        except Exception as e:  # noqa: BLE001
+            status["message"] = f"plugin not installed: {e}"
+            return status
+
+        try:
+            import miloco.perception.engine.omni.prompt_builder as pb
+
+            status["patched"] = bool(
+                getattr(pb._encode_video_mp4, "__miloco_privacy_patched__", False)
+            )
+        except Exception as e:  # noqa: BLE001
+            status["message"] = f"patch status unavailable: {e}"
+
+        try:
+            from miloco_privacy_plugin.debug_state import get_preview_meta
+
+            meta = get_preview_meta()
+        except Exception as e:  # noqa: BLE001
+            if not status["message"]:
+                status["message"] = f"preview unavailable: {e}"
+            return status
+
+        if isinstance(meta, Mapping):
+            status.update(
+                {
+                    "has_preview": bool(meta.get("has_preview")),
+                    "timestamp_ms": int(meta.get("timestamp_ms", 0) or 0),
+                    "frame_count": int(meta.get("frame_count", 0) or 0),
+                    "width": int(meta.get("width", 0) or 0),
+                    "height": int(meta.get("height", 0) or 0),
+                }
+            )
+        return status
+
+    def get_privacy_preview_image(self, variant: str) -> bytes | None:
+        try:
+            from miloco_privacy_plugin.debug_state import get_preview_image
+        except Exception:  # noqa: BLE001
+            return None
+        if variant not in {"original", "processed"}:
+            return None
+        return get_preview_image(variant)

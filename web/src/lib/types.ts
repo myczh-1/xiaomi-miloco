@@ -197,6 +197,30 @@ export interface ScopeHome {
   inUse: boolean;
 }
 
+export interface RtspDebugConfig {
+  did: string;
+  enabled: boolean;
+  url?: string | null;
+  name: string;
+  connected: boolean;
+  lastError?: string | null;
+  hasPreview: boolean;
+  lastFrameWallMs: number;
+}
+
+export interface PrivacyPreviewStatus {
+  pluginInstalled: boolean;
+  pluginEnabled: boolean;
+  debugEnabled: boolean;
+  patched: boolean;
+  hasPreview: boolean;
+  message: string;
+  timestampMs: number;
+  frameCount: number;
+  width: number;
+  height: number;
+}
+
 // ── 多家庭 ─────────────────────────────────────────────────
 // HomeId 仅作 useAsync 缓存 key 占位用("primary"),真 home_id 走 ScopeHome.homeId
 // (已接通 PUT/GET /api/miot/scope/homes,backend 多家庭接入范围已上线)。

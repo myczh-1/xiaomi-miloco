@@ -520,3 +520,44 @@ class EventListResponse(BaseModel):
         default_factory=list,
         description="按 timestamp DESC 排,前端 length < limit 时停止翻页",
     )
+
+
+class RtspDebugConfigRequest(BaseModel):
+    """Debug RTSP/RTMP source config update."""
+
+    url: str | None = Field(
+        default=None,
+        description="RTSP/RTMP URL; empty/null disables the debug source",
+    )
+    name: str = Field(
+        default="RTSP Camera",
+        description="Display name for the debug source",
+    )
+
+
+class RtspDebugConfig(BaseModel):
+    """Current debug RTSP/RTMP source state."""
+
+    did: str = Field(default="rtsp_0")
+    enabled: bool = False
+    url: str | None = None
+    name: str = "RTSP Camera"
+    connected: bool = False
+    last_error: str | None = None
+    has_preview: bool = False
+    last_frame_wall_ms: int = 0
+
+
+class PrivacyPreviewStatus(BaseModel):
+    """External privacy-plugin debug preview status."""
+
+    plugin_installed: bool = False
+    plugin_enabled: bool = False
+    debug_enabled: bool = False
+    patched: bool = False
+    has_preview: bool = False
+    message: str = ""
+    timestamp_ms: int = 0
+    frame_count: int = 0
+    width: int = 0
+    height: int = 0

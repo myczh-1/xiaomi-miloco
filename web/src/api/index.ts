@@ -32,6 +32,8 @@ import type {
   PerfTraceRow,
   PerfWindow,
   Person,
+  PrivacyPreviewStatus,
+  RtspDebugConfig,
   Scene,
   ScopeCamera,
   ScopeHome,
@@ -293,6 +295,31 @@ export async function listCameras(homeId?: HomeId): Promise<PerceptionCamera[]> 
     return [];
   }
   return impl.realListCameras();
+}
+
+export async function getRtspDebugConfig(): Promise<RtspDebugConfig> {
+  return impl.realGetRtspDebugConfig();
+}
+
+export async function updateRtspDebugConfig(input: {
+  url?: string | null;
+  name: string;
+}): Promise<RtspDebugConfig> {
+  return impl.realUpdateRtspDebugConfig(input);
+}
+
+export async function getRtspDebugPreview(): Promise<Blob> {
+  return impl.realGetRtspDebugPreview();
+}
+
+export async function getPrivacyPreviewStatus(): Promise<PrivacyPreviewStatus> {
+  return impl.realGetPrivacyPreviewStatus();
+}
+
+export async function getPrivacyPreviewImage(
+  variant: "original" | "processed",
+): Promise<Blob> {
+  return impl.realGetPrivacyPreviewImage(variant);
 }
 
 // ── 让它休息 / 唤醒 ────────────────────────────────────────

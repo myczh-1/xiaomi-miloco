@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 import av
+import numpy as np
 
 from miloco.config import get_settings
 from miloco.node_monitor import NodeName
@@ -60,6 +61,10 @@ class _RtspDeviceState:
     stop_event: threading.Event = field(default_factory=threading.Event)
     connected: bool = False
     epoch_delta: int | None = None
+    last_error: str | None = None
+    last_frame_wall_ms: int = 0
+    latest_video_frame: np.ndarray | None = None
+    debug_lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 class RtspDeviceAdapter(BaseDeviceAdapter):
@@ -98,6 +103,18 @@ class RtspDeviceAdapter(BaseDeviceAdapter):
             )
         }
 
+    async def sync_devices(self, all_devices: dict | None = None) -> None:
+        cfg = get_settings().perception.rtsp
+        desired_url = (cfg.url or "").strip() if cfg and cfg.url else ""
+        desired_name = cfg.name or "RTSP Camera" if cfg else "RTSP Camera"
+        state = self._devices.get(_DEFAULT_DID)
+        if state is not None:
+            # 单路 RTSP/RTMP 源固定 did，配置变更时必须主动重建连接；
+            # 仅靠基类 sync 的 did 集合比较看不出 url/name 变化。
+            if not desired_url or state.url != desired_url or state.name != desired_name:
+                await self.disconnect_device(_DEFAULT_DID)
+        await super().sync_devices(all_devices)
+
     async def connect_device(
         self, did: str, source: PerceptionDevice | None = None
     ) -> None:
@@ -108,11 +125,15 @@ class RtspDeviceAdapter(BaseDeviceAdapter):
         if not cfg or not cfg.url:
             logger.warning("No RTSP URL configured, cannot connect")
             return
+        url = cfg.url.strip()
+        if not url:
+            logger.warning("Empty RTSP URL configured, cannot connect")
+            return
 
         collect_cfg = get_settings().perception.collect
         state = _RtspDeviceState(
             did=did,
-            url=cfg.url,
+            url=url,
             name=cfg.name or "RTSP Camera",
             sync_buffer=MultiTrackSyncBuffer(
                 track_names=_RTSP_TRACKS,
@@ -132,7 +153,7 @@ class RtspDeviceAdapter(BaseDeviceAdapter):
         )
         self._devices[did] = state
         state.thread.start()
-        logger.info("RTSP pull started for %s → %s", did, cfg.url)
+        logger.info("RTSP pull started for %s → %s", did, url)
 
     async def disconnect_device(self, did: str) -> None:
         state = self._devices.pop(did, None)
@@ -185,6 +206,29 @@ class RtspDeviceAdapter(BaseDeviceAdapter):
                 )
         return result
 
+    def peek_latest_frame(self, did: str) -> np.ndarray | None:
+        state = self._devices.get(did)
+        if not state:
+            return None
+        with state.debug_lock:
+            if state.latest_video_frame is None:
+                return None
+            return state.latest_video_frame.copy()
+
+    def get_debug_status(self) -> dict[str, object]:
+        cfg = get_settings().perception.rtsp
+        url = (cfg.url or "").strip() if cfg and cfg.url else ""
+        state = self._devices.get(_DEFAULT_DID)
+        return {
+            "did": _DEFAULT_DID,
+            "enabled": bool(url),
+            "url": url or None,
+            "name": (cfg.name or "RTSP Camera") if cfg else "RTSP Camera",
+            "connected": bool(state and state.connected),
+            "last_error": state.last_error if state else None,
+            "has_preview": bool(state and state.latest_video_frame is not None),
+            "last_frame_wall_ms": state.last_frame_wall_ms if state else 0,
+        }
 
     async def shutdown(self) -> None:
         for did in list(self._devices):
@@ -201,6 +245,7 @@ class RtspDeviceAdapter(BaseDeviceAdapter):
             except Exception as e:
                 if state.stop_event.is_set():
                     break
+                state.last_error = str(e)
                 logger.warning(
                     "RTSP pull error for %s: %s — reconnecting in %.0fs",
                     state.did, e, reconnect_delay,
@@ -231,6 +276,7 @@ class RtspDeviceAdapter(BaseDeviceAdapter):
             timeout=10,
         )
         state.connected = True
+        state.last_error = None
         logger.info("Stream connected: %s", state.url)
 
         try:
@@ -270,6 +316,9 @@ class RtspDeviceAdapter(BaseDeviceAdapter):
             wall_ms=wall_ms,
             unix_ms=wall_ms + (state.epoch_delta or 0),
         )
+        with state.debug_lock:
+            state.latest_video_frame = bgr.copy()
+            state.last_frame_wall_ms = wall_ms
         state.sync_buffer.put("decoded_video", decoded, stream_ts=stream_ts, wall_ms=wall_ms)
 
     def _handle_audio_frame(

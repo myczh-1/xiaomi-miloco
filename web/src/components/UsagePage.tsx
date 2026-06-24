@@ -16,6 +16,7 @@ import type { UsagePeriod, UsageStats } from "@/lib/types";
 import { UsageTodayOverview } from "./UsageTodayOverview";
 import { UsageTimelineChart } from "./UsageTimelineChart";
 import { UsageBreakdownTable } from "./UsageBreakdownTable";
+import { UsageDebugStreams } from "./UsageDebugStreams";
 import { UsageOmniConfig } from "./UsageOmniConfig";
 import { PerfInline } from "./PerfInline";
 
@@ -36,6 +37,7 @@ export function UsagePage() {
     <div className="space-y-6">
       {/* 模型配置卡置顶、可折叠;独立于用量加载(用量请求失败也能在此修配置自救) */}
       <UsageOmniConfig />
+      <UsageDebugStreams />
 
       <section className="rounded-xl bg-bg-secondary border border-border shadow-sm p-5 md:p-6">
         <h2 className="text-section-title mb-4">{t("usage.tokenUsageTitle")}</h2>
